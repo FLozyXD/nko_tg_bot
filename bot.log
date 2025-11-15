@@ -1,0 +1,14 @@
+✅ Конфигурация успешно загружена!
+   • Telegram Bot: настроен
+   • Kandinsky API: настроен ✨
+   • База данных: настроена
+
+Traceback (most recent call last):
+  File "/Users/vyacheslavfrein/Documents/nko_tg_bot/main.py", line 14, in <module>
+    bot = AsyncTeleBot(config.TOKEN)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/telebot/async_telebot.py", line 196, in __init__
+    util.validate_token(self.token)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/telebot/util.py", line 698, in validate_token
+    raise ValueError('Token must contain a colon')
+ValueError: Token must contain a colon

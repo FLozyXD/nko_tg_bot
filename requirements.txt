@@ -1,0 +1,8 @@
+python-dotenv==1.0.0
+pyTelegramBotAPI==4.14.0
+asyncpg>=0.30.0
+gigachat==0.1.43
+aiohttp==3.9.1
+certifi==2024.2.2
+requests==2.31.0
+
