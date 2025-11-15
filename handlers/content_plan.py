@@ -72,6 +72,14 @@ def register_handlers(bot):
         user_id = message.from_user.id
         content_plan_data[user_id] = {'step': 'get_period'}
         
+        loading = await bot.send_message(
+            message.chat.id,
+            "Загрузка...",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+
+        await bot.delete_message(loading.chat.id, loading.message_id)
+
         markup = get_content_plan_period_keyboard()
         await bot.send_message(
             message.chat.id,
