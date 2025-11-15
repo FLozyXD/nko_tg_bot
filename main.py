@@ -93,24 +93,23 @@ async def start_nko_info_collection(message):
         await bot.send_message(message.chat.id, info_text, reply_markup=markup, parse_mode="Markdown")
     else:
         await bot.send_message(message.chat.id, "Похоже, вы здесь впервые. Давайте заполним информацию о вашей НКО.")
-        await start_info_steps(message)
+        await start_info_steps(message.chat.id, message.from_user.id)
 
 # Обработчик Inline-кнопок "Да/Нет"
 @bot.callback_query_handler(func=lambda call: call.data in ["update_nko_info", "cancel_nko_update"])
-async def handle_nko_update_callback(call):
+async def handle_nko_update_callback(call: types.CallbackQuery):
     await bot.answer_callback_query(call.id)
     await bot.delete_message(call.message.chat.id, call.message.message_id)
     if call.data == "update_nko_info":
-        await start_info_steps(call.message)
+        await start_info_steps(call.message.chat.id, call.from_user.id)
     else:
         await show_employee_menu(call.message.chat.id, "Хорошо, возвращаю вас в меню.")
 
 # Функция, которая запускает пошаговый опрос
-async def start_info_steps(message):
-    user_id = message.from_user.id
+async def start_info_steps(chat_id, user_id):
     # Устанавливаем начальное состояние (шаг) для пользователя
     user_data_collector[user_id] = {'step': 'awaiting_name'}
-    await bot.send_message(message.chat.id, "Шаг 1/4: Введите название вашей НКО:")
+    await bot.send_message(chat_id, "Шаг 1/4: Введите название вашей НКО:")
 
 # ЕДИНЫЙ ОБРАБОТЧИК для всех шагов сбора информации
 @bot.message_handler(func=lambda message: message.from_user.id in user_data_collector)

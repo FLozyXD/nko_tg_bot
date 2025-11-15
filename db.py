@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Пул соединений будет храниться здесь
-pool = None
+pool = asyncpg.create_pool()
 
 async def init_db():
     """
