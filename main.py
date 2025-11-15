@@ -41,7 +41,8 @@ async def show_volunteer_menu(chat_id, text="Вы в меню для волон�
 @bot.message_handler(commands=['start'])
 async def send_welcome(message):
     """Отправляет приветствие и предлагает выбрать роль."""
-    
+    if message.from_user.id in user_data_collector:
+        del user_data_collector[message.from_user.id]
     # Создаем кнопки для выбора роли
     markup = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
     btn_employee = types.KeyboardButton("Я сотрудник НКО")
