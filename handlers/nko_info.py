@@ -1,27 +1,24 @@
 from telebot import types
 import db
-from utils.states import user_data_collector
+from utils.states import user_data_collector, cancel_user_tasks
 from utils.keyboards import get_nko_update_inline_keyboard, get_style_keyboard
 from handlers.start import show_employee_menu
 
 
 async def start_info_steps(bot, chat_id, user_id):
+    # Отменяем предыдущие задачи пользователя
+    cancel_user_tasks(user_id)
+    
     user_data_collector[user_id] = {'step': 'awaiting_name'}
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton("🔙 Назад"))
-    await bot.send_message(chat_id, "Шаг 1/4: Введите название вашей НКО:", reply_markup=markup)
+    await bot.send_message(chat_id, "Шаг 1/4: Введите название вашей НКО:")
 
 
 def register_handlers(bot):
     
-    @bot.message_handler(func=lambda message: message.text == "🔙 Назад")
-    async def go_back(message):
-        await show_employee_menu(bot, message.chat.id, "Что-нибудь ещё?")
-
     @bot.message_handler(func=lambda message: message.text == "ℹ️ Информация о НКО")
     async def start_nko_info_collection(message):
         user_id = message.from_user.id
-
+        
         existing_data = await db.get_nko_info(user_id)
         if existing_data:
             info_text = (
@@ -51,8 +48,6 @@ def register_handlers(bot):
     async def user_info_handler(message):
         user_id = message.from_user.id
         current_step = user_data_collector[user_id].get('step')
-
-
 
         if current_step == 'awaiting_name':
             user_data_collector[user_id]['name'] = message.text

@@ -2,7 +2,7 @@ from telebot import types
 import asyncio
 import db
 from gigachat_rest_api import gigachat_rest_service
-from utils.states import text_generation_data
+from utils.states import text_generation_data, cancel_user_tasks, active_tasks, image_generation_data, text_editor_data, content_plan_data
 from utils.keyboards import get_text_generation_modes_keyboard
 from handlers.start import show_employee_menu
 
@@ -77,6 +77,11 @@ def register_handlers(bot):
     
     @bot.message_handler(func=lambda message: message.text == "📝 Генерация текста")
     async def start_text_generation(message):
+        user_id = message.from_user.id
+        
+        # Отменяем предыдущие задачи пользователя
+        cancel_user_tasks(user_id)
+        
         markup = get_text_generation_modes_keyboard()
         await bot.send_message(
             message.chat.id,
@@ -124,7 +129,12 @@ def register_handlers(bot):
                 parse_mode="Markdown"
             )
 
-    @bot.message_handler(func=lambda message: message.from_user.id in text_generation_data)
+    @bot.message_handler(func=lambda message: (
+        message.from_user.id in text_generation_data and
+        message.from_user.id not in image_generation_data and
+        message.from_user.id not in text_editor_data and
+        message.from_user.id not in content_plan_data
+    ))
     async def process_text_generation(message):
         user_id = message.from_user.id
         data = text_generation_data[user_id]
@@ -134,11 +144,12 @@ def register_handlers(bot):
             idea = message.text
             nko_info = await db.get_nko_info(user_id)
             
-            await bot.send_message(message.chat.id, "⏳ Генерирую пост через GigaChat AI...")
+            status_msg = await bot.send_message(message.chat.id, "⏳ Генерирую пост через GigaChat AI...")
             
-            try:
-                system_prompt = build_system_prompt(nko_info)
-                prompt = f"""Перепиши следующую идею в готовый пост для социальных сетей НКО:
+            async def generate_task():
+                try:
+                    system_prompt = build_system_prompt(nko_info)
+                    prompt = f"""Перепиши следующую идею в готовый пост для социальных сетей НКО:
 
 {idea}
 
@@ -149,27 +160,44 @@ def register_handlers(bot):
 - Сделай вовлекающим с призывом к действию
 - Длина: 200-400 символов"""
 
-                loop = asyncio.get_event_loop()
-                post = await loop.run_in_executor(
-                    None,
-                    gigachat_rest_service.chat,
-                    prompt,
-                    system_prompt
-                )
-                
-                await bot.send_message(
-                    message.chat.id,
-                    f"✅ *Готовый пост:*\n\n{post}",
-                    parse_mode="Markdown"
-                )
-            except Exception as e:
-                await bot.send_message(
-                    message.chat.id,
-                    f"❌ Ошибка при генерации: {str(e)}"
-                )
-            finally:
-                del text_generation_data[user_id]
-                await show_employee_menu(bot, message.chat.id, "Что-нибудь ещё?")
+                    loop = asyncio.get_event_loop()
+                    post = await loop.run_in_executor(
+                        None,
+                        gigachat_rest_service.chat,
+                        prompt,
+                        system_prompt
+                    )
+                    
+                    await bot.delete_message(message.chat.id, status_msg.message_id)
+                    await bot.send_message(
+                        message.chat.id,
+                        f"✅ *Готовый пост:*\n\n{post}",
+                        parse_mode="Markdown"
+                    )
+                except asyncio.CancelledError:
+                    # Задача была отменена
+                    await bot.delete_message(message.chat.id, status_msg.message_id)
+                    await bot.send_message(
+                        message.chat.id,
+                        "❌ Генерация текста отменена (запущена новая команда)."
+                    )
+                    raise
+                except Exception as e:
+                    await bot.delete_message(message.chat.id, status_msg.message_id)
+                    await bot.send_message(
+                        message.chat.id,
+                        f"❌ Ошибка при генерации: {str(e)}"
+                    )
+                finally:
+                    if user_id in text_generation_data:
+                        del text_generation_data[user_id]
+                    if user_id in active_tasks:
+                        del active_tasks[user_id]
+                    await show_employee_menu(bot, message.chat.id, "Что-нибудь ещё?")
+            
+            # Создаём и сохраняем задачу
+            task = asyncio.create_task(generate_task())
+            active_tasks[user_id] = task
         
         elif mode == 'structured':
             step = data.get('step')
@@ -202,19 +230,20 @@ def register_handlers(bot):
                 data['details'] = message.text if message.text.lower() != 'пропустить' else ''
                 
                 nko_info = await db.get_nko_info(user_id)
-                await bot.send_message(message.chat.id, "⏳ Создаю пост через GigaChat AI...")
+                status_msg = await bot.send_message(message.chat.id, "⏳ Создаю пост через GigaChat AI...")
                 
-                try:
-                    event_data = {
-                        'event_name': data.get('event_name'),
-                        'date': data.get('date'),
-                        'place': data.get('place'),
-                        'participants': data.get('participants'),
-                        'details': data.get('details', '')
-                    }
-                    
-                    system_prompt = build_system_prompt(nko_info)
-                    prompt = f"""Создай пост для соцсетей о событии:
+                async def generate_task():
+                    try:
+                        event_data = {
+                            'event_name': data.get('event_name'),
+                            'date': data.get('date'),
+                            'place': data.get('place'),
+                            'participants': data.get('participants'),
+                            'details': data.get('details', '')
+                        }
+                        
+                        system_prompt = build_system_prompt(nko_info)
+                        prompt = f"""Создай пост для соцсетей о событии:
 
 Название: {event_data.get('event_name')}
 Дата: {event_data.get('date')}
@@ -229,27 +258,44 @@ def register_handlers(bot):
 - Вовлекающий текст
 - 250-500 символов"""
 
-                    loop = asyncio.get_event_loop()
-                    post = await loop.run_in_executor(
-                        None,
-                        gigachat_rest_service.chat,
-                        prompt,
-                        system_prompt
-                    )
-                    
-                    await bot.send_message(
-                        message.chat.id,
-                        f"✅ *Готовый пост:*\n\n{post}",
-                        parse_mode="Markdown"
-                    )
-                except Exception as e:
-                    await bot.send_message(
-                        message.chat.id,
-                        f"❌ Ошибка при генерации: {str(e)}"
-                    )
-                finally:
-                    del text_generation_data[user_id]
-                    await show_employee_menu(bot, message.chat.id, "Что-нибудь ещё?")
+                        loop = asyncio.get_event_loop()
+                        post = await loop.run_in_executor(
+                            None,
+                            gigachat_rest_service.chat,
+                            prompt,
+                            system_prompt
+                        )
+                        
+                        await bot.delete_message(message.chat.id, status_msg.message_id)
+                        await bot.send_message(
+                            message.chat.id,
+                            f"✅ *Готовый пост:*\n\n{post}",
+                            parse_mode="Markdown"
+                        )
+                    except asyncio.CancelledError:
+                        # Задача была отменена
+                        await bot.delete_message(message.chat.id, status_msg.message_id)
+                        await bot.send_message(
+                            message.chat.id,
+                            "❌ Генерация текста отменена (запущена новая команда)."
+                        )
+                        raise
+                    except Exception as e:
+                        await bot.delete_message(message.chat.id, status_msg.message_id)
+                        await bot.send_message(
+                            message.chat.id,
+                            f"❌ Ошибка при генерации: {str(e)}"
+                        )
+                    finally:
+                        if user_id in text_generation_data:
+                            del text_generation_data[user_id]
+                        if user_id in active_tasks:
+                            del active_tasks[user_id]
+                        await show_employee_menu(bot, message.chat.id, "Что-нибудь ещё?")
+                
+                # Создаём и сохраняем задачу
+                task = asyncio.create_task(generate_task())
+                active_tasks[user_id] = task
         
         elif mode == 'examples':
             if message.text.upper() == 'ГОТОВО':
@@ -284,11 +330,12 @@ def register_handlers(bot):
                 examples = data.get('examples', '')
                 nko_info = await db.get_nko_info(user_id)
                 
-                await bot.send_message(message.chat.id, "⏳ Создаю пост через GigaChat AI...")
+                status_msg = await bot.send_message(message.chat.id, "⏳ Создаю пост через GigaChat AI...")
                 
-                try:
-                    system_prompt = build_system_prompt(nko_info)
-                    prompt = f"""Проанализируй стиль этих постов:
+                async def generate_task():
+                    try:
+                        system_prompt = build_system_prompt(nko_info)
+                        prompt = f"""Проанализируй стиль этих постов:
 
 {examples}
 
@@ -296,25 +343,42 @@ def register_handlers(bot):
 
 Используй тот же стиль, добавь хештеги."""
 
-                    loop = asyncio.get_event_loop()
-                    post = await loop.run_in_executor(
-                        None,
-                        gigachat_rest_service.chat,
-                        prompt,
-                        system_prompt
-                    )
-                    
-                    await bot.send_message(
-                        message.chat.id,
-                        f"✅ *Готовый пост:*\n\n{post}",
-                        parse_mode="Markdown"
-                    )
-                except Exception as e:
-                    await bot.send_message(
-                        message.chat.id,
-                        f"❌ Ошибка при генерации: {str(e)}"
-                    )
-                finally:
-                    del text_generation_data[user_id]
-                    await show_employee_menu(bot, message.chat.id, "Что-нибудь ещё?")
+                        loop = asyncio.get_event_loop()
+                        post = await loop.run_in_executor(
+                            None,
+                            gigachat_rest_service.chat,
+                            prompt,
+                            system_prompt
+                        )
+                        
+                        await bot.delete_message(message.chat.id, status_msg.message_id)
+                        await bot.send_message(
+                            message.chat.id,
+                            f"✅ *Готовый пост:*\n\n{post}",
+                            parse_mode="Markdown"
+                        )
+                    except asyncio.CancelledError:
+                        # Задача была отменена
+                        await bot.delete_message(message.chat.id, status_msg.message_id)
+                        await bot.send_message(
+                            message.chat.id,
+                            "❌ Генерация текста отменена (запущена новая команда)."
+                        )
+                        raise
+                    except Exception as e:
+                        await bot.delete_message(message.chat.id, status_msg.message_id)
+                        await bot.send_message(
+                            message.chat.id,
+                            f"❌ Ошибка при генерации: {str(e)}"
+                        )
+                    finally:
+                        if user_id in text_generation_data:
+                            del text_generation_data[user_id]
+                        if user_id in active_tasks:
+                            del active_tasks[user_id]
+                        await show_employee_menu(bot, message.chat.id, "Что-нибудь ещё?")
+                
+                # Создаём и сохраняем задачу
+                task = asyncio.create_task(generate_task())
+                active_tasks[user_id] = task
 
