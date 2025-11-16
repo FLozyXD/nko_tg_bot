@@ -8,13 +8,23 @@ from handlers.start import show_employee_menu
 async def start_info_steps(bot, chat_id, user_id):
     # Отменяем предыдущие задачи пользователя
     cancel_user_tasks(user_id)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("🔙 Назад"))
     
     user_data_collector[user_id] = {'step': 'awaiting_name'}
-    await bot.send_message(chat_id, "Шаг 1/4: Введите название вашей НКО:")
-
+    await bot.send_message(
+        chat_id,
+        "Шаг 1/4: Введите название вашей НКО:",
+        reply_markup=markup
+    )
 
 def register_handlers(bot):
     
+    @bot.message_handler(func=lambda message: message.text == "🔙 Назад")
+    async def back_to_menu(message):
+        cancel_user_tasks(message.from_user.id)
+        await show_employee_menu(bot, message.chat.id)
+
     @bot.message_handler(func=lambda message: message.text == "ℹ️ Информация о НКО")
     async def start_nko_info_collection(message):
         user_id = message.from_user.id
@@ -44,7 +54,7 @@ def register_handlers(bot):
         else:
             await show_employee_menu(bot, call.message.chat.id, "Хорошо, возвращаю вас в меню.")
 
-    @bot.message_handler(func=lambda message: message.from_user.id in user_data_collector)
+    @bot.message_handler(func=lambda message: message.from_user.id in user_data_collector and message.text != "🔙 Назад")
     async def user_info_handler(message):
         user_id = message.from_user.id
         current_step = user_data_collector[user_id].get('step')
