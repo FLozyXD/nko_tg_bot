@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import asyncio
 import db
 from gigachat_rest_api import gigachat_rest_service
-from utils.states import content_plan_data
+from utils.states import content_plan_data, cancel_user_tasks, active_tasks
 from utils.keyboards import get_content_plan_period_keyboard, get_content_plan_frequency_keyboard
 from handlers.start import show_employee_menu
 
@@ -70,16 +70,12 @@ def register_handlers(bot):
     @bot.message_handler(func=lambda message: message.text == "📅 Контент-план")
     async def start_content_plan(message):
         user_id = message.from_user.id
+        
+        # Отменяем предыдущие задачи пользователя
+        cancel_user_tasks(user_id)
+        
         content_plan_data[user_id] = {'step': 'get_period'}
         
-        loading = await bot.send_message(
-            message.chat.id,
-            "Загрузка...",
-            reply_markup=types.ReplyKeyboardRemove()
-        )
-
-        await bot.delete_message(loading.chat.id, loading.message_id)
-
         markup = get_content_plan_period_keyboard()
         await bot.send_message(
             message.chat.id,
@@ -118,14 +114,15 @@ def register_handlers(bot):
         
         nko_info = await db.get_nko_info(user_id)
         
-        await bot.send_message(
+        status_msg = await bot.send_message(
             call.message.chat.id,
             "⏳ Генерирую контент-план через GigaChat AI..."
         )
         
-        try:
-            system_prompt = build_system_prompt_cp(nko_info)
-            prompt = f"""Создай контент-план для Telegram-канала НКО на {period}.
+        async def generate_task():
+            try:
+                system_prompt = build_system_prompt_cp(nko_info)
+                prompt = f"""Создай контент-план для Telegram-канала НКО на {period}.
 Частота: {frequency}
 
 Требования:
@@ -137,26 +134,42 @@ def register_handlers(bot):
 Формат:
 ДАТА | ТИП | ОПИСАНИЕ"""
 
-            loop = asyncio.get_event_loop()
-            content_plan = await loop.run_in_executor(
-                None,
-                gigachat_rest_service.chat,
-                prompt,
-                system_prompt
-            )
-            
-            await bot.send_message(
-                call.message.chat.id,
-                f"📅 *Ваш контент-план*\n\n{content_plan}",
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            await bot.send_message(
-                call.message.chat.id,
-                f"❌ Произошла ошибка при генерации контент-плана: {str(e)}"
-            )
-        finally:
-            if user_id in content_plan_data:
-                del content_plan_data[user_id]
-            await show_employee_menu(bot, call.message.chat.id, "Что-нибудь ещё?")
+                loop = asyncio.get_event_loop()
+                content_plan = await loop.run_in_executor(
+                    None,
+                    gigachat_rest_service.chat,
+                    prompt,
+                    system_prompt
+                )
+                
+                await bot.delete_message(call.message.chat.id, status_msg.message_id)
+                await bot.send_message(
+                    call.message.chat.id,
+                    f"📅 *Ваш контент-план*\n\n{content_plan}",
+                    parse_mode="Markdown"
+                )
+            except asyncio.CancelledError:
+                # Задача была отменена
+                await bot.delete_message(call.message.chat.id, status_msg.message_id)
+                await bot.send_message(
+                    call.message.chat.id,
+                    "❌ Генерация контент-плана отменена (запущена новая команда)."
+                )
+                raise
+            except Exception as e:
+                await bot.delete_message(call.message.chat.id, status_msg.message_id)
+                await bot.send_message(
+                    call.message.chat.id,
+                    f"❌ Произошла ошибка при генерации контент-плана: {str(e)}"
+                )
+            finally:
+                if user_id in content_plan_data:
+                    del content_plan_data[user_id]
+                if user_id in active_tasks:
+                    del active_tasks[user_id]
+                await show_employee_menu(bot, call.message.chat.id, "Что-нибудь ещё?")
+        
+        # Создаём и сохраняем задачу
+        task = asyncio.create_task(generate_task())
+        active_tasks[user_id] = task
 
