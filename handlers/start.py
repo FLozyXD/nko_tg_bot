@@ -1,5 +1,6 @@
 from telebot import types
 from utils.keyboards import get_role_selection_keyboard, get_employee_menu_keyboard, get_volunteer_menu_keyboard
+from utils.states import cancel_user_tasks
 
 
 async def show_employee_menu(bot, chat_id, text="Вы в меню для сотрудников. Выберите действие:"):
@@ -16,6 +17,10 @@ def register_handlers(bot):
     
     @bot.message_handler(commands=['start'])
     async def send_welcome(message):
+        user_id = message.from_user.id
+        # Очищаем все состояния при старте
+        cancel_user_tasks(user_id)
+        
         markup = get_role_selection_keyboard()
         await bot.send_message(
             message.chat.id,
@@ -26,6 +31,10 @@ def register_handlers(bot):
 
     @bot.message_handler(func=lambda message: message.text == "🔙 Сменить роль")
     async def change_role(message):
+        user_id = message.from_user.id
+        # Очищаем все состояния при смене роли
+        cancel_user_tasks(user_id)
+        
         markup = get_role_selection_keyboard()
         await bot.send_message(
             message.chat.id,
@@ -35,6 +44,10 @@ def register_handlers(bot):
 
     @bot.message_handler(func=lambda message: message.text in ["Я сотрудник НКО", "Я волонтёр"])
     async def select_role(message):
+        user_id = message.from_user.id
+        # Очищаем все состояния при выборе роли
+        cancel_user_tasks(user_id)
+        
         if message.text == "Я сотрудник НКО":
             await show_employee_menu(bot, message.chat.id)
         elif message.text == "Я волонтёр":

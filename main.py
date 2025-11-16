@@ -2,7 +2,7 @@ from telebot.async_telebot import AsyncTeleBot
 import asyncio
 import db
 import config
-from handlers import start, nko_info, text_generation, image_generation, text_editor, content_plan
+from handlers import start, nko_info, text_generation, image_generation, text_editor, content_plan, volunteer
 
 
 if not config.validate_config():
@@ -21,25 +21,19 @@ def register_all_handlers():
     image_generation.register_handlers(bot)
     text_editor.register_handlers(bot)
     content_plan.register_handlers(bot)
+    volunteer.register_handlers(bot)
 
 
 async def main():
     try:
-        try:
-            await db.init_db()
-            print("✅ База данных подключена")
-        except Exception as e:
-            print(f"⚠️  База данных недоступна: {e}")
-            print("⚠️  Бот будет работать без сохранения данных об НКО")
+        await db.init_db()
+        await db.init_sample_data()
         
         register_all_handlers()
         print("🤖 Бот запущен и готов к работе!")
         await bot.polling()
     finally:
-        try:
-            await db.close_db()
-        except:
-            pass
+        await db.close_db()
 
 
 if __name__ == '__main__':
