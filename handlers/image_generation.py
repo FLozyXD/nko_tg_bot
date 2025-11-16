@@ -3,6 +3,7 @@ from io import BytesIO
 from kandinsky_api import kandinsky_service
 from utils.states import image_generation_data, cancel_user_tasks, active_tasks, text_generation_data, text_editor_data, content_plan_data
 from handlers.start import show_employee_menu
+from telebot import types
 
 
 def register_handlers(bot):
@@ -15,21 +16,29 @@ def register_handlers(bot):
         cancel_user_tasks(user_id)
         
         image_generation_data[user_id] = {'step': 'get_description'}
-        
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(types.KeyboardButton("🔙 Назад"))
+
         await bot.send_message(
             message.chat.id,
             "🎨 *Генерация изображения*\n\n"
             "Опишите, какое изображение вы хотите получить.\n\n"
             "Например: _\"Волонтёры помогают пожилым людям, тёплая атмосфера, светлые тона\"_\n\n"
             "⚡ Генерация займёт 30-60 секунд.",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
+            reply_markup=markup
         )
+
+    @bot.message_handler(func=lambda message: message.text == "🔙 Назад")
+    async def back_to_menu(message):
+        await show_employee_menu(bot, message.chat.id)
 
     @bot.message_handler(func=lambda message: (
         message.from_user.id in image_generation_data and
         message.from_user.id not in text_generation_data and
         message.from_user.id not in text_editor_data and
-        message.from_user.id not in content_plan_data
+        message.from_user.id not in content_plan_data and
+        message.text != "🔙 Назад"
     ))
     async def process_image_generation(message):
         user_id = message.from_user.id

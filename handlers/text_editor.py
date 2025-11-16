@@ -2,6 +2,7 @@ import asyncio
 from gigachat_rest_api import gigachat_rest_service
 from utils.states import text_editor_data, cancel_user_tasks, active_tasks, text_generation_data, image_generation_data, content_plan_data
 from handlers.start import show_employee_menu
+from telebot import types
 
 
 def register_handlers(bot):
@@ -12,7 +13,8 @@ def register_handlers(bot):
         
         # Отменяем предыдущие задачи пользователя
         cancel_user_tasks(user_id)
-        
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(types.KeyboardButton("🔙 Назад"))
         text_editor_data[user_id] = {'step': 'get_text'}
         
         await bot.send_message(
@@ -24,14 +26,21 @@ def register_handlers(bot):
             "• Логику изложения\n"
             "• Читаемость текста\n"
             "• Дам советы по улучшению",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
+            reply_markup=markup
         )
+
+    @bot.message_handler(func=lambda message: message.text == "🔙 Назад")
+    async def back_to_menu(message):
+        cancel_user_tasks(message.from_user.id)
+        await show_employee_menu(bot, message.chat.id)
 
     @bot.message_handler(func=lambda message: (
         message.from_user.id in text_editor_data and
         message.from_user.id not in text_generation_data and
         message.from_user.id not in image_generation_data and
-        message.from_user.id not in content_plan_data
+        message.from_user.id not in content_plan_data and
+        message.text != "🔙 Назад"
     ))
     async def process_text_editor(message):
         user_id = message.from_user.id

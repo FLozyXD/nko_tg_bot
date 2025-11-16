@@ -75,7 +75,11 @@ def register_handlers(bot):
         cancel_user_tasks(user_id)
         
         content_plan_data[user_id] = {'step': 'get_period'}
-        
+        back_markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        back_markup.add(types.KeyboardButton("🔙 Назад"))
+        loading = await bot.send_message(message.chat.id, "📅 Загрузка...", reply_markup=back_markup)
+        await bot.delete_message(loading.chat.id, loading.message_id)
+
         markup = get_content_plan_period_keyboard()
         await bot.send_message(
             message.chat.id,
@@ -85,12 +89,19 @@ def register_handlers(bot):
             reply_markup=markup
         )
 
+    @bot.message_handler(func=lambda message: message.text == "🔙 Назад")
+    async def back_to_menu(message):
+        cancel_user_tasks(message.from_user.id)
+        await show_employee_menu(bot, message.chat.id)
+
     @bot.callback_query_handler(func=lambda call: call.data.startswith("cp_period_"))
     async def handle_content_plan_period(call: types.CallbackQuery):
         await bot.answer_callback_query(call.id)
         await bot.delete_message(call.message.chat.id, call.message.message_id)
         
         user_id = call.from_user.id
+        if user_id not in content_plan_data:
+            return
         period = "неделю" if call.data == "cp_period_week" else "месяц"
         
         content_plan_data[user_id] = {'period': period, 'step': 'get_frequency'}
@@ -109,6 +120,8 @@ def register_handlers(bot):
         await bot.delete_message(call.message.chat.id, call.message.message_id)
         
         user_id = call.from_user.id
+        if user_id not in content_plan_data:
+            return
         frequency = FREQUENCY_MAP.get(call.data, "2 раза в неделю")
         period = content_plan_data[user_id].get('period', 'неделю')
         
