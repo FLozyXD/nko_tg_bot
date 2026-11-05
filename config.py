@@ -1,54 +1,60 @@
+"""Конфигурация бота.
+
+Все секреты читаются только из переменных окружения / файла .env.
+Значений по умолчанию для токенов нет — при отсутствии переменных бот
+завершится с понятной ошибкой.
+"""
+
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
-TOKEN_DEFAULT = "REMOVED_TELEGRAM_TOKEN"
-GIGACHAT_CREDENTIALS_DEFAULT = "REMOVED_GIGACHAT_CREDENTIALS"
-GIGACHAT_VERIFY_SSL_CERTS_DEFAULT = False
-GIGACHAT_SCOPE_DEFAULT = "GIGACHAT_API_PERS"
-KANDINSKY_API_KEY_DEFAULT = "REMOVED_KANDINSKY_API_KEY"
-KANDINSKY_SECRET_KEY_DEFAULT = "REMOVED_KANDINSKY_SECRET"
-KANDINSKY_URL_DEFAULT = "https://api-key.fusionbrain.ai/"
 
-def get_config(key: str, default: str = ""):
+def get_config(key: str, default: str = "") -> str:
     value = os.getenv(key)
     if value is None or value == "" or "your_" in value or "_here" in value:
         return default
     return value
 
-TOKEN = get_config('TOKEN', TOKEN_DEFAULT)
-GIGACHAT_CREDENTIALS = get_config('GIGACHAT_CREDENTIALS', GIGACHAT_CREDENTIALS_DEFAULT)
-GIGACHAT_VERIFY_SSL_CERTS = get_config('GIGACHAT_VERIFY_SSL_CERTS', str(GIGACHAT_VERIFY_SSL_CERTS_DEFAULT)).lower() == 'true'
-GIGACHAT_SCOPE = get_config('GIGACHAT_SCOPE', GIGACHAT_SCOPE_DEFAULT)
-KANDINSKY_API_KEY = get_config('KANDINSKY_API_KEY', KANDINSKY_API_KEY_DEFAULT)
-KANDINSKY_SECRET_KEY = get_config('KANDINSKY_SECRET_KEY', KANDINSKY_SECRET_KEY_DEFAULT)
-KANDINSKY_URL = get_config('KANDINSKY_URL', KANDINSKY_URL_DEFAULT)
 
-def validate_config():
+TOKEN = get_config("TOKEN")
+GIGACHAT_CREDENTIALS = get_config("GIGACHAT_CREDENTIALS")
+GIGACHAT_VERIFY_SSL_CERTS = (
+    get_config("GIGACHAT_VERIFY_SSL_CERTS", "false").lower() == "true"
+)
+GIGACHAT_SCOPE = get_config("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
+KANDINSKY_API_KEY = get_config("KANDINSKY_API_KEY")
+KANDINSKY_SECRET_KEY = get_config("KANDINSKY_SECRET_KEY")
+KANDINSKY_URL = get_config("KANDINSKY_URL", "https://api-key.fusionbrain.ai/")
+
+
+def validate_config() -> bool:
     errors = []
-    
-    if not TOKEN or TOKEN == "":
-        errors.append("⚠️ TOKEN не установлен! Получите его у @BotFather в Telegram")
-    
+
+    if not TOKEN:
+        errors.append("TOKEN не установлен. Получите его у @BotFather в Telegram")
+
+    if not GIGACHAT_CREDENTIALS:
+        errors.append(
+            "GIGACHAT_CREDENTIALS не установлен. Скопируйте Authorization key "
+            "из личного кабинета GigaChat"
+        )
+
     if errors:
-        print("\n" + "="*60)
-        print("❌ ОШИБКА КОНФИГУРАЦИИ:")
-        print("="*60)
+        print("\n" + "=" * 60)
+        print("ОШИБКА КОНФИГУРАЦИИ:")
+        print("=" * 60)
         for error in errors:
-            print(f"  {error}")
-        print("\n📝 ИНСТРУКЦИЯ:")
-        print("  1. Откройте файл config.py")
-        print("  2. Найдите переменную TOKEN_DEFAULT")
-        print("  3. Вставьте туда токен от @BotFather")
-        print("  4. Сохраните и перезапустите бота")
-        print("="*60 + "\n")
+            print(f"  - {error}")
+        print("\nСоздайте файл .env по образцу .env.example и заполните его.")
+        print("=" * 60 + "\n")
         return False
-    
-    print("✅ Конфигурация успешно загружена!")
-    print(f"   • Telegram Bot: {'настроен' if TOKEN else 'НЕ настроен'}")
-    print(f"   • Kandinsky API: {'настроен ✨' if KANDINSKY_API_KEY else 'НЕ настроен'}")
-    print(f"   • База данных: SQLite (локальный файл)")
+
+    print("Конфигурация успешно загружена")
+    print(f"  Telegram Bot: {'настроен' if TOKEN else 'НЕ настроен'}")
+    print(f"  Kandinsky API: {'настроен' if KANDINSKY_API_KEY else 'НЕ настроен'}")
+    print("  База данных: SQLite (локальный файл)")
     print()
     return True
-
